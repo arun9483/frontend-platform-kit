@@ -50,6 +50,9 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       HOME: /root
+      # GitHub container jobs don't propagate the image's ENV to steps — point
+      # Playwright at the browsers baked into the image explicitly.
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     steps:
       - name: Checkout
         uses: actions/checkout@v4
