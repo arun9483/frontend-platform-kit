@@ -1,0 +1,58 @@
+name: Lighthouse audit vs baseline
+description: >
+  Serves the production build, runs lighthouse N times per route (median), and
+  asserts a ratchet against the committed baseline plus absolute budget caps
+  (LCP <= 2.5s, TBT <= 300ms, CLS <= 0.1, a11y >= 0.95, perf >= 0.90).
+  If the baseline file does not exist, runs in record mode: writes the baseline
+  and exits green (Phase 0 capture).
+
+inputs:
+  routes:
+    description: Comma-separated routes (e.g. "/,/projects,/articles")
+    required: false
+    default: '/'
+  base-url:
+    required: false
+    default: 'http://localhost:3000'
+  start-command:
+    description: Command that serves the production build
+    required: false
+    default: 'pnpm start'
+  baseline-path:
+    required: false
+    default: 'docs/quality/lighthouse-baseline.json'
+  runs:
+    description: Lighthouse runs per route (median is used)
+    required: false
+    default: '3'
+  lighthouse-version:
+    required: false
+    default: '13.4.0'
+
+runs:
+  using: composite
+  steps:
+    - name: Install lighthouse
+      shell: bash
+      run: npm install -g lighthouse@${{ inputs.lighthouse-version }}
+
+    - name: Start server
+      shell: bash
+      run: |
+        nohup ${{ inputs.start-command }} > /tmp/lighthouse-server.log 2>&1 &
+        for i in $(seq 1 60); do
+          if curl -sf "${{ inputs.base-url }}" > /dev/null; then exit 0; fi
+          sleep 1
+        done
+        echo "Server did not become ready at ${{ inputs.base-url }}" >&2
+        cat /tmp/lighthouse-server.log >&2
+        exit 1
+
+    - name: Run lighthouse and assert budgets
+      shell: bash
+      env:
+        ROUTES: ${{ inputs.routes }}
+        BASE_URL: ${{ inputs.base-url }}
+        BASELINE_PATH: ${{ inputs.baseline-path }}
+        RUNS: ${{ inputs.runs }}
+      run: node "$GITHUB_ACTION_PATH/lighthouse-audit.mjs"

@@ -1,0 +1,96 @@
+# Reusable security gate: osv-scanner (dependency vulnerabilities, blocking at
+# high+ severity) and gitleaks (secret scanning over full git history).
+#
+# Waivers: osv ignores go in the consumer's osv-scanner.toml with justification,
+# owner, and expiry <= 90 days. No permanent exceptions.
+
+name: Security
+
+on:
+  workflow_call:
+    inputs:
+      severity-threshold:
+        description: Minimum CVSS score that fails the build (7.0 = high)
+        type: string
+        required: false
+        default: '7.0'
+      osv-version:
+        type: string
+        required: false
+        default: 'v2.3.8'
+      gitleaks-version:
+        type: string
+        required: false
+        default: '8.30.1'
+
+jobs:
+  dependency-vulnerabilities:
+    name: osv-scanner (fail at high+)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install osv-scanner ${{ inputs.osv-version }}
+        run: |
+          curl -sSfL -o /usr/local/bin/osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/${{ inputs.osv-version }}/osv-scanner_linux_amd64"
+          chmod +x /usr/local/bin/osv-scanner
+
+      - name: Scan lockfile
+        run: |
+          osv-scanner scan source --lockfile=pnpm-lock.yaml \
+            --format json --output osv-results.json || true
+          osv-scanner scan source --lockfile=pnpm-lock.yaml --format table || true
+
+      - name: Gate on severity >= ${{ inputs.severity-threshold }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const threshold = Number(process.argv[1]);
+            const data = JSON.parse(fs.readFileSync("osv-results.json", "utf8"));
+            const offenders = [];
+            for (const result of data.results ?? []) {
+              for (const pkg of result.packages ?? []) {
+                for (const group of pkg.groups ?? []) {
+                  const score = Number(group.max_severity || 0);
+                  if (score >= threshold) {
+                    offenders.push(
+                      `${pkg.package.name}@${pkg.package.version} (CVSS ${score}: ${(group.ids ?? []).join(", ")})`
+                    );
+                  }
+                }
+              }
+            }
+            if (offenders.length > 0) {
+              console.error(`Vulnerabilities at or above CVSS ${threshold}:`);
+              for (const line of offenders) console.error(`  - ${line}`);
+              process.exit(1);
+            }
+            console.log(`No vulnerabilities at or above CVSS ${threshold}.`);
+          ' '${{ inputs.severity-threshold }}'
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: osv-results
+          path: osv-results.json
+          retention-days: 30
+
+  secret-scan:
+    name: gitleaks (full history)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks ${{ inputs.gitleaks-version }}
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${{ inputs.gitleaks-version }}/gitleaks_${{ inputs.gitleaks-version }}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+
+      - name: Scan repository history
+        run: gitleaks detect --source . --redact --no-banner

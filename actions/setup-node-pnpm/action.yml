@@ -1,0 +1,33 @@
+name: Setup Node + pnpm
+description: >
+  Composite setup for pnpm monorepos: installs pnpm (version from the repo's
+  packageManager field), Node (version from .nvmrc), restores the pnpm store
+  cache, and installs dependencies with a frozen lockfile.
+  The caller is responsible for actions/checkout.
+
+inputs:
+  node-version-file:
+    description: File containing the Node version to use
+    required: false
+    default: .nvmrc
+  install:
+    description: Whether to run pnpm install --frozen-lockfile
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ inputs.node-version-file }}
+        cache: pnpm
+
+    - name: Install dependencies
+      if: inputs.install == 'true'
+      shell: bash
+      run: pnpm install --frozen-lockfile

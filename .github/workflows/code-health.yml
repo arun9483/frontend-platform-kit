@@ -1,0 +1,72 @@
+# Reusable weekly code-health snapshot (advisory — never blocks):
+#   - knip: dead code, unused exports, unused dependencies
+#   - jscpd: copy-paste duplication
+# Findings are filed as a `code-health` GitHub issue; `/quality-audit` (AI)
+# reads them for triage. Trend lives in git history + monthly digests.
+#
+# Consumer contract: root scripts `quality:knip` and `quality:dupes`.
+
+name: Code Health
+
+on:
+  workflow_call:
+    secrets:
+      TURBO_TOKEN:
+        required: false
+      TURBO_TEAM:
+        required: false
+
+jobs:
+  code-health:
+    name: knip + jscpd (advisory)
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup
+        uses: arun9483/frontend-platform-kit/actions/setup-node-pnpm@v1
+
+      - name: knip
+        id: knip
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pnpm quality:knip 2>&1 | tee knip.txt
+
+      - name: jscpd
+        id: jscpd
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pnpm quality:dupes 2>&1 | tee jscpd.txt
+
+      - name: File advisory issue when findings exist
+        if: steps.knip.outcome == 'failure' || steps.jscpd.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Weekly code-health snapshot ($(date -u +%F)). Advisory — triage via /quality-audit."
+            echo
+            echo "## knip (${{ steps.knip.outcome }})"
+            echo '```'
+            tail -c 20000 knip.txt
+            echo '```'
+            echo
+            echo "## jscpd (${{ steps.jscpd.outcome }})"
+            echo '```'
+            tail -c 20000 jscpd.txt
+            echo '```'
+          } > code-health.md
+          gh label create "code-health" --force --color 1D76DB \
+            --description "Automated weekly code-health snapshot" --repo "$GITHUB_REPOSITORY"
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Code health: knip/jscpd findings — $(date -u +%F)" \
+            --label "code-health" \
+            --body-file code-health.md

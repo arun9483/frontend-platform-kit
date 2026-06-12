@@ -1,0 +1,14 @@
+{
+  "name": "arun-frontend-platform",
+  "owner": {
+    "name": "Arun Tripathi",
+    "email": "arun9483@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "frontend-platform-kit",
+      "source": "./",
+      "description": "AI-first frontend quality & security skills (preflight, ux/security/perf/quality audits, deps modernization, monthly digest)."
+    }
+  ]
+}

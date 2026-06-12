@@ -1,0 +1,44 @@
+# Reusable quality gate: lint, format, typecheck, unit + integration tests, build.
+# E2E and visual regression live in ux-regression.yml; security in security.yml;
+# bundle/lighthouse budgets in performance.yml.
+#
+# Consumer contract (root package.json scripts): lint, format:check, typecheck, test, build.
+
+name: Quality
+
+on:
+  workflow_call:
+    secrets:
+      TURBO_TOKEN:
+        required: false
+      TURBO_TEAM:
+        required: false
+
+jobs:
+  quality:
+    name: Lint, Typecheck, Test, Build
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup
+        uses: arun9483/frontend-platform-kit/actions/setup-node-pnpm@v1
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Tests (unit + integration)
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

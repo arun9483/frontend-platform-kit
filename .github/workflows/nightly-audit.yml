@@ -1,0 +1,96 @@
+# Reusable nightly audit (consumer wires the cron — workflow_call cannot):
+#   - osv-scanner full rescan: catches CVEs disclosed for unchanged dependencies;
+#     findings auto-open a GitHub issue labeled sev:<level>.
+#   - full e2e suite across all browsers; failure auto-opens an issue.
+
+name: Nightly Audit
+
+on:
+  workflow_call:
+    inputs:
+      osv-version:
+        type: string
+        required: false
+        default: 'v2.3.8'
+      playwright-version:
+        type: string
+        required: false
+        default: '1.58.2'
+      run-e2e:
+        description: Run the full e2e suite (false for library-only repos)
+        type: boolean
+        required: false
+        default: true
+    secrets:
+      TURBO_TOKEN:
+        required: false
+      TURBO_TEAM:
+        required: false
+
+jobs:
+  osv-rescan:
+    name: osv-scanner nightly rescan
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install osv-scanner ${{ inputs.osv-version }}
+        run: |
+          curl -sSfL -o /usr/local/bin/osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/${{ inputs.osv-version }}/osv-scanner_linux_amd64"
+          chmod +x /usr/local/bin/osv-scanner
+
+      - name: Scan lockfile
+        run: |
+          osv-scanner scan source --lockfile=pnpm-lock.yaml \
+            --format json --output osv-results.json || true
+
+      - name: Triage and file issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const data = JSON.parse(fs.readFileSync("osv-results.json", "utf8"));
+            const findings = [];
+            let maxScore = 0;
+            for (const result of data.results ?? []) {
+              for (const pkg of result.packages ?? []) {
+                for (const group of pkg.groups ?? []) {
+                  const score = Number(group.max_severity || 0);
+                  maxScore = Math.max(maxScore, score);
+                  findings.push(
+                    `- \`${pkg.package.name}@${pkg.package.version}\` — CVSS ${score} (${(group.ids ?? []).join(", ")})`
+                  );
+                }
+              }
+            }
+            const level =
+              maxScore >= 9 ? "critical" : maxScore >= 7 ? "high" : maxScore >= 4 ? "medium" : "low";
+            fs.writeFileSync("osv-summary.md", findings.join("\n"));
+            fs.appendFileSync(process.env.GITHUB_ENV, `OSV_COUNT=${findings.length}\nOSV_LEVEL=${level}\n`);
+          '
+          if [ "$OSV_COUNT" -gt 0 ]; then
+            gh label create "sev:$OSV_LEVEL" --force --color B60205 \
+              --description "Max severity of automated security finding" --repo "$GITHUB_REPOSITORY"
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Nightly OSV scan: $OSV_COUNT vulnerable package(s), max severity $OSV_LEVEL — $(date -u +%F)" \
+              --label "sev:$OSV_LEVEL" \
+              --body-file osv-summary.md
+            echo "Filed issue with $OSV_COUNT finding(s) at sev:$OSV_LEVEL."
+          else
+            echo "No known vulnerabilities."
+          fi
+
+  full-e2e:
+    name: full e2e (all browsers)
+    if: ${{ inputs.run-e2e }}
+    uses: arun9483/frontend-platform-kit/.github/workflows/ux-regression.yml@v1
+    with:
+      e2e-args: ''
+      playwright-version: ${{ inputs.playwright-version }}
+      issue-on-failure: true
+    secrets: inherit

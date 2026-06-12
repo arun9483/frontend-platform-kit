@@ -1,0 +1,9 @@
+{
+  "name": "frontend-platform-kit",
+  "description": "AI-first frontend quality & security framework: /preflight, /ux-audit, /security-audit, /perf-audit, /quality-audit, /deps-modernize, /quality-digest skills plus reusable deterministic CI workflows.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Arun Tripathi",
+    "email": "arun9483@gmail.com"
+  }
+}

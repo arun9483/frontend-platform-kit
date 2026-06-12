@@ -1,0 +1,84 @@
+# Reusable performance gate:
+#   - size-limit: per-route bundle budgets (blocking from day one)
+#   - lighthouse: lab metrics vs committed baseline (warn mode for the first
+#     30 days via `lighthouse-blocking: false`, then flip to true)
+#
+# Consumer contract:
+#   - root script `perf:size` runs size-limit against the built app
+#   - committed baseline at `docs/quality/lighthouse-baseline.json` (ratchet:
+#     "no worse than baseline", tightened quarterly)
+
+name: Performance
+
+on:
+  workflow_call:
+    inputs:
+      routes:
+        description: Comma-separated routes to audit with lighthouse (empty = skip lighthouse, e.g. library-only repos)
+        type: string
+        required: false
+        default: '/'
+      lighthouse-blocking:
+        description: Fail the workflow on lighthouse regressions (false = warn)
+        type: boolean
+        required: false
+        default: false
+      baseline-path:
+        type: string
+        required: false
+        default: 'docs/quality/lighthouse-baseline.json'
+      start-command:
+        description: Command that serves the production build on port 3000
+        type: string
+        required: false
+        default: 'pnpm start'
+    secrets:
+      TURBO_TOKEN:
+        required: false
+      TURBO_TEAM:
+        required: false
+
+jobs:
+  bundle-budgets:
+    name: size-limit (blocking)
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup
+        uses: arun9483/frontend-platform-kit/actions/setup-node-pnpm@v1
+
+      - name: Build
+        run: pnpm build
+
+      - name: Check bundle budgets
+        run: pnpm perf:size
+
+  lighthouse:
+    name: lighthouse vs baseline ${{ inputs.lighthouse-blocking && '(blocking)' || '(warn)' }}
+    if: ${{ inputs.routes != '' }}
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ !inputs.lighthouse-blocking }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup
+        uses: arun9483/frontend-platform-kit/actions/setup-node-pnpm@v1
+
+      - name: Build
+        run: pnpm build
+
+      - name: Lighthouse audit vs baseline
+        uses: arun9483/frontend-platform-kit/actions/lighthouse-audit@v1
+        with:
+          routes: ${{ inputs.routes }}
+          baseline-path: ${{ inputs.baseline-path }}
+          start-command: ${{ inputs.start-command }}
