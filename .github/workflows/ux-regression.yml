@@ -92,8 +92,11 @@ jobs:
           if git diff --cached --quiet; then
             echo "No baseline changes."
           else
-            git commit -m "chore(e2e): update visual baselines [skip ci]"
-            git push
+            # --no-verify: consumer husky hooks are developer-machine gates and
+            # break in CI (e.g. pre-push turbo --filter='...[origin/main]' has
+            # no origin/main ref in the container checkout). CI is its own gate.
+            git commit --no-verify -m "chore(e2e): update visual baselines [skip ci]"
+            git push --no-verify
           fi
 
       - name: Upload Playwright report
