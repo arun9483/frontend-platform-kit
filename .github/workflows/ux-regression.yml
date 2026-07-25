@@ -83,7 +83,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A -- '*-snapshots/*'
+          # Stage whichever snapshot convention the consumer uses (default
+          # *-snapshots dirs or a custom __screenshots__ snapshotPathTemplate);
+          # an unmatched pathspec must not fail the job.
+          for p in '*-snapshots/*' '*__screenshots__*'; do
+            git add -A -- "$p" 2>/dev/null || true
+          done
           if git diff --cached --quiet; then
             echo "No baseline changes."
           else
