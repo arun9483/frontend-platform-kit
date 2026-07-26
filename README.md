@@ -13,7 +13,26 @@ Two layers:
 Reports and baselines live in each consumer repo under `docs/quality/`; findings
 become GitHub issues (`sev:*`, `code-health`, `ux-regression` labels). History = git.
 
-## Onboarding a new repo (< 1 hour)
+---
+
+## 🚀 Getting Started
+
+**New to the toolkit?** Start here: **[→ ONBOARDING.md](./ONBOARDING.md)**
+
+Complete step-by-step guide (~1 hour):
+- Setup (Node, pnpm, GitHub)
+- All npm packages & versions
+- All config files
+- Git hooks
+- CI/CD integration
+- Claude Code plugin
+- Complete tic-tac-toe example
+- Baseline recording
+- Development workflow
+
+---
+
+## Quick Reference for Experienced Users (< 1 hour)
 
 1. **CI (~25 lines).** Add `.github/workflows/ci.yml`:
 
