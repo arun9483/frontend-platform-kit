@@ -47,7 +47,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup
         uses: arun9483/frontend-platform-kit/actions/setup-node-pnpm@v1
@@ -68,7 +68,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup
         uses: arun9483/frontend-platform-kit/actions/setup-node-pnpm@v1
