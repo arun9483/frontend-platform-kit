@@ -43,6 +43,11 @@ become GitHub issues (`sev:*`, `code-health`, `ux-regression` labels). History =
 
    Always pin to a tag (`@v1`) — **never `@main`**.
 
+   `@v1` is a moving pointer to the latest `v1.x`, deliberately not an exact
+   patch tag: fixes reach every consumer without a PR per repo. The trade-off is
+   reproducibility — a re-run may not replay the same kit commit — so breaking
+   changes get a `v2` rather than a `v1` move.
+
    Optional wrappers (copy from arun-dev-platform): `nightly.yml` (cron →
    `nightly-audit.yml@v1`), `weekly.yml` (cron → `code-health.yml@v1`),
    `merge-main.yml` (cross-browser e2e on push to main),
