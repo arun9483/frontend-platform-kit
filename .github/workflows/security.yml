@@ -43,32 +43,12 @@ jobs:
             --format json --output osv-results.json || true
           osv-scanner scan source --lockfile=pnpm-lock.yaml --format table || true
 
-      - name: Gate on severity >= ${{ inputs.severity-threshold }}
-        run: |
-          node -e '
-            const fs = require("fs");
-            const threshold = Number(process.argv[1]);
-            const data = JSON.parse(fs.readFileSync("osv-results.json", "utf8"));
-            const offenders = [];
-            for (const result of data.results ?? []) {
-              for (const pkg of result.packages ?? []) {
-                for (const group of pkg.groups ?? []) {
-                  const score = Number(group.max_severity || 0);
-                  if (score >= threshold) {
-                    offenders.push(
-                      `${pkg.package.name}@${pkg.package.version} (CVSS ${score}: ${(group.ids ?? []).join(", ")})`
-                    );
-                  }
-                }
-              }
-            }
-            if (offenders.length > 0) {
-              console.error(`Vulnerabilities at or above CVSS ${threshold}:`);
-              for (const line of offenders) console.error(`  - ${line}`);
-              process.exit(1);
-            }
-            console.log(`No vulnerabilities at or above CVSS ${threshold}.`);
-          ' '${{ inputs.severity-threshold }}'
+      # Reports every finding at every severity to the run summary, then fails
+      # only at/above the consumer's threshold.
+      - name: Report all findings, gate at >= ${{ inputs.severity-threshold }}
+        uses: arun9483/frontend-platform-kit/actions/osv-report@v1
+        with:
+          fail-at: ${{ inputs.severity-threshold }}
 
       - name: Upload scan results
         if: always()

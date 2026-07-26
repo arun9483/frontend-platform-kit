@@ -48,41 +48,59 @@ jobs:
           osv-scanner scan source --lockfile=pnpm-lock.yaml \
             --format json --output osv-results.json || true
 
-      - name: Triage and file issue
+      # Reports every severity without gating — the nightly's job is visibility,
+      # not blocking. Outputs are consumed by the next step.
+      - name: Report all findings
+        id: osv
+        uses: arun9483/frontend-platform-kit/actions/osv-report@v1
+
+      # Separate step: step outputs are only readable after the producing step
+      # completes, which is also why the previous inline version (reading a
+      # GITHUB_ENV value it had just written) always saw an empty count and
+      # never filed anything.
+      - name: File or update the tracking issue
+        if: ${{ steps.osv.outputs.count != '0' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COUNT: ${{ steps.osv.outputs.count }}
+          LEVEL: ${{ steps.osv.outputs.level }}
+          BODY_FILE: ${{ steps.osv.outputs['summary-file'] }}
+        run: |
+          gh label create "osv-scan" --force --color B60205 \
+            --description "Automated dependency vulnerability scan" --repo "$GITHUB_REPOSITORY"
+          gh label create "sev:$LEVEL" --force --color B60205 \
+            --description "Max severity of automated security finding" --repo "$GITHUB_REPOSITORY"
+
+          title="Dependency vulnerabilities: $COUNT package(s), max severity $LEVEL"
+          # One living issue rather than a new one each night.
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --label "osv-scan" --limit 1 --json number --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --body-file "$BODY_FILE" --add-label "sev:$LEVEL"
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Rescanned $(date -u +%F): $COUNT finding(s), max severity $LEVEL."
+            echo "Updated issue #$existing ($COUNT finding(s), sev:$LEVEL)."
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --label "osv-scan" --label "sev:$LEVEL" --body-file "$BODY_FILE"
+            echo "Filed new issue ($COUNT finding(s), sev:$LEVEL)."
+          fi
+
+      - name: Close the tracking issue when clean
+        if: ${{ steps.osv.outputs.count == '0' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node -e '
-            const fs = require("fs");
-            const data = JSON.parse(fs.readFileSync("osv-results.json", "utf8"));
-            const findings = [];
-            let maxScore = 0;
-            for (const result of data.results ?? []) {
-              for (const pkg of result.packages ?? []) {
-                for (const group of pkg.groups ?? []) {
-                  const score = Number(group.max_severity || 0);
-                  maxScore = Math.max(maxScore, score);
-                  findings.push(
-                    `- \`${pkg.package.name}@${pkg.package.version}\` — CVSS ${score} (${(group.ids ?? []).join(", ")})`
-                  );
-                }
-              }
-            }
-            const level =
-              maxScore >= 9 ? "critical" : maxScore >= 7 ? "high" : maxScore >= 4 ? "medium" : "low";
-            fs.writeFileSync("osv-summary.md", findings.join("\n"));
-            fs.appendFileSync(process.env.GITHUB_ENV, `OSV_COUNT=${findings.length}\nOSV_LEVEL=${level}\n`);
-          '
-          if [ "$OSV_COUNT" -gt 0 ]; then
-            gh label create "sev:$OSV_LEVEL" --force --color B60205 \
-              --description "Max severity of automated security finding" --repo "$GITHUB_REPOSITORY"
-            gh issue create --repo "$GITHUB_REPOSITORY" \
-              --title "Nightly OSV scan: $OSV_COUNT vulnerable package(s), max severity $OSV_LEVEL — $(date -u +%F)" \
-              --label "sev:$OSV_LEVEL" \
-              --body-file osv-summary.md
-            echo "Filed issue with $OSV_COUNT finding(s) at sev:$OSV_LEVEL."
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --label "osv-scan" --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+              --comment "All previously reported dependency vulnerabilities are resolved as of $(date -u +%F)."
+            echo "Closed issue #$existing."
           else
-            echo "No known vulnerabilities."
+            echo "No known vulnerabilities at any severity."
           fi
 
   full-e2e:

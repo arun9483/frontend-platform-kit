@@ -1,0 +1,47 @@
+name: OSV report
+description: >
+  Parses osv-scanner JSON into a severity-complete report: every finding at
+  every severity lands in the run summary and in a markdown file, with counts
+  exposed as outputs. Optionally fails when a finding reaches fail-at, so the
+  consumer chooses what to act on rather than what to see.
+
+inputs:
+  results:
+    description: Path to the osv-scanner JSON output
+    required: false
+    default: osv-results.json
+  summary-file:
+    description: Path to write the markdown report to (used as an issue body)
+    required: false
+    default: osv-summary.md
+  fail-at:
+    description: >
+      CVSS score at or above which the step fails. Leave empty to report
+      without gating.
+    required: false
+    default: ''
+
+outputs:
+  count:
+    description: Total findings across all severities
+    value: ${{ steps.report.outputs.count }}
+  level:
+    description: Highest severity band present (critical|high|medium|low|none)
+    value: ${{ steps.report.outputs.level }}
+  max-severity:
+    description: Highest CVSS score present
+    value: ${{ steps.report.outputs['max-severity'] }}
+  summary-file:
+    description: Path to the markdown report
+    value: ${{ steps.report.outputs['summary-file'] }}
+
+runs:
+  using: composite
+  steps:
+    - id: report
+      shell: bash
+      env:
+        OSV_RESULTS: ${{ inputs.results }}
+        OSV_SUMMARY: ${{ inputs.summary-file }}
+        OSV_FAIL_AT: ${{ inputs.fail-at }}
+      run: node "$GITHUB_ACTION_PATH/osv-report.mjs"
