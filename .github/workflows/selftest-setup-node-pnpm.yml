@@ -1,0 +1,25 @@
+# TEMPORARY: exercises actions/setup-node-pnpm on both pnpm paths. Removed before merge.
+name: selftest setup-node-pnpm
+on:
+  push:
+    branches: [feat/pnpm-setup-for-pnpm-11]
+jobs:
+  setup:
+    strategy:
+      fail-fast: false
+      matrix:
+        pnpm: ['10.32.1', '11.28.5']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: A minimal pnpm project at the workspace root
+        run: |
+          printf '{\n  "name": "selftest",\n  "private": true,\n  "packageManager": "pnpm@%s"\n}\n' "${{ matrix.pnpm }}" > package.json
+          echo 24 > .nvmrc
+          printf "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n" > pnpm-lock.yaml
+      - uses: ./actions/setup-node-pnpm
+      - name: The pinned pnpm and Node 24 are active
+        run: |
+          test "$(pnpm --version)" = "${{ matrix.pnpm }}"
+          node --version | grep -q '^v24\.'
+          echo "pnpm $(pnpm --version), node $(node --version)"
