@@ -1,7 +1,8 @@
 name: Setup Node + pnpm
 description: >
   Composite setup for pnpm monorepos: installs pnpm (version from the repo's
-  packageManager field), Node (version from .nvmrc), restores the pnpm store
+  packageManager field; pnpm/setup for pnpm 11+, pnpm/action-setup for older),
+  Node (version from .nvmrc), restores the pnpm store
   cache, and installs dependencies with a frozen lockfile.
   The caller is responsible for actions/checkout.
 
@@ -18,7 +19,27 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install pnpm
+    # pnpm 11 and later install through pnpm/setup, the successor to
+    # pnpm/action-setup: action-setup lays pnpm out the pnpm 10 way, which pnpm 11
+    # warns about on every run. pnpm/setup installs only pnpm 11+, so a repo still
+    # on pnpm 10 keeps action-setup. Plain shell: Node is not set up yet.
+    - name: Read the pnpm major version
+      id: pnpm
+      shell: bash
+      run: |
+        major=$(sed -n 's/.*"packageManager": *"pnpm@\([0-9][0-9]*\)\..*/\1/p' package.json | head -n 1)
+        echo "major=${major:-0}" >> "$GITHUB_OUTPUT"
+
+    - name: Install pnpm (11 and later)
+      if: fromJSON(steps.pnpm.outputs.major) >= 11
+      uses: pnpm/setup@v3
+      with:
+        # Node and its pnpm cache are the next step's; the install is the last one.
+        node-version-file: false
+        install: false
+
+    - name: Install pnpm (10)
+      if: fromJSON(steps.pnpm.outputs.major) < 11
       uses: pnpm/action-setup@v6
 
     - name: Setup Node
