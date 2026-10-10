@@ -27,7 +27,7 @@ inputs:
     default: '3'
   lighthouse-version:
     required: false
-    default: '13.4.0'
+    default: '13.5.0'
 
 runs:
   using: composite
